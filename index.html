@@ -1,403 +1,338 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8" />
+<meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>コエカタマリン風・ことばキャッチ（キュー投下版）</title>
+<title>音声×ことばの雨（軽量版）</title>
+
+<!-- 任意の日本語フォント（無くてもOK・自動フォールバック） -->
+<link href="https://fonts.googleapis.com/css2?family=Kosugi+Maru&family=Noto+Sans+JP:wght@400;700&family=Noto+Serif+JP:wght@600&display=swap" rel="stylesheet">
+
 <style>
-  :root{ --scoreW:200px; --gap:12px; }
-  html,body{height:100%;margin:0;background:#0b0e14;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui}
-  canvas{position:fixed;inset:0}
-  #ui{
-    position:fixed;top:8px;left:12px;right:calc(2*var(--scoreW) + 3*var(--gap));
-    display:flex;gap:10px;align-items:center;z-index:10;flex-wrap:wrap
-  }
-  button{
-    background:#1c2435;color:#e7eefc;border:1px solid #32415e;padding:10px 14px;border-radius:12px;
-    font-size:16px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)
-  }
-  button:hover{border-color:#41588a}
-  .label{font-size:12px;color:#a9b4c6;margin-left:8px}
-  input[type="range"]{width:220px}
-  /* スコア */
-  #scorePanel{
-    position:fixed;top:8px;right:var(--gap);width:var(--scoreW);padding:12px 14px;border-radius:16px;z-index:11;
-    background:#121829;border:1px solid #2a3350;color:#cfe1ff;box-shadow:0 8px 24px rgba(0,0,0,.28)
-  }
-  #scorePanel h2{margin:.2rem 0 .4rem;font-size:14px;color:#9fb7ff;font-weight:600;letter-spacing:.02em}
-  #scoreVal{font-size:44px;line-height:1;font-weight:800}
-  #speedVal{display:inline-block;min-width:3ch;text-align:right}
-  /* キュー（スコア左） */
-  #queuePanel{
-    position:fixed;top:8px;right:calc(var(--gap) + var(--scoreW) + var(--gap));
-    width:var(--scoreW);padding:12px 14px;border-radius:16px;z-index:11;
-    background:#0f1528;border:1px solid #253057;color:#d8e3ff;box-shadow:0 8px 24px rgba(0,0,0,.28)
-  }
-  #queuePanel h2{margin:.2rem 0 .4rem;font-size:14px;color:#a9c2ff;font-weight:600;letter-spacing:.02em}
-  #queueList{max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
-  .qItem{
-    background:#162042;border:1px solid #2b3b6c;border-radius:12px;padding:6px 10px;
-    font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center
-  }
-  .qItem span{font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif;font-size:22px;line-height:1}
-  /* LED */
-  #leds{position:fixed;top:54px;left:12px;right:calc(2*var(--scoreW) + 3*var(--gap));display:flex;gap:10px;z-index:9;font-size:12px;color:#a9b4c6}
-  .led{width:10px;height:10px;border-radius:50%;background:#525b6e;display:inline-block;margin-right:6px;vertical-align:middle}
-  .on{background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
-  @media (max-width:920px){
-    #ui{right:12px}
-    #queuePanel{top:64px;right:12px;width:auto}
-    #scorePanel{top:118px;right:12px;width:auto}
-    #leds{right:12px}
-  }
+:root{
+  --bg: #f7fafc;
+  --ink: #222;
+  --accent: #2563eb;
+}
+html, body { height: 100%; margin: 0; background: var(--bg); color: var(--ink);
+  font-family: "BIZ UDP Gothic", system-ui, -apple-system, "Noto Sans JP", sans-serif; }
+.app { min-height: 100%; display: grid; grid-template-rows: auto 1fr; }
+header{
+  position: sticky; top: 0;
+  background: color-mix(in oklch, white 70%, var(--bg));
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px clamp(12px, 4vw, 24px);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; z-index: 10;
+}
+h1{ font-size: clamp(16px, 2.2vw, 18px); margin: 0 8px 0 0; font-weight: 700; }
+button{
+  border: 0; border-radius: 999px; padding: 8px 14px; font-size: 15px; font-weight: 700;
+  cursor: pointer; color: white; background: var(--accent);
+}
+button.stop{ background:#ef4444 } button:disabled{ opacity:.5 }
+label, .status, .live, .speedControl { font-size: 14px; }
+#stage{ position: relative; overflow: hidden; min-height: calc(100vh - 70px); }
+
+/* 落下ワード */
+.word{
+  position: absolute; top: -2.5em; left: 0;
+  padding: .25em .5em; line-height: 1.1; font-weight: 700;
+  background: white; border-radius: .6em; box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  white-space: nowrap; user-select: none; will-change: transform;
+  transition: opacity .12s ease, box-shadow .12s ease, border-color .12s ease;
+  border: 2px solid transparent;
+}
+.word.interim{ opacity: .6; border-color: #c7d2fe; }
+.word.final{ opacity: 1; border-color: #a7f3d0; }
+
+/* ライブ表示＆速度 */
+.live{ padding: 2px 8px; background:#fff; border-radius: 8px; border:1px solid #e5e7eb; }
+.speedControl{ display:flex; align-items:center; gap:4px; }
+.speedControl input[type="range"]{ width: 120px; }
 </style>
-<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
-<!-- かな変換（漢字→ひらがな） -->
-<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dist/kuromoji.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js"></script>
 </head>
 <body>
-  <canvas id="cv"></canvas>
-
-  <div id="ui">
-    <button id="startBtn">🎙️ はじめる</button>
-    <button id="stopBtn">⏹ とめる</button>
-
-    <span class="label">落下スピード</span>
-    <input id="speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" />
-    <span class="label"><span id="speedVal">1.0</span>×</span>
-  </div>
-
-  <div id="leds">
-    <span><span id="micLed" class="led"></span>マイク</span>
-    <span><span id="asrLed" class="led"></span>音声認識</span>
-  </div>
-
-  <aside id="queuePanel">
-    <h2>つぎに おちる ことば</h2>
-    <div id="queueList"></div>
-  </aside>
-
-  <aside id="scorePanel">
-    <h2>スコア</h2>
-    <div id="scoreVal">0</div>
-  </aside>
+<div class="app">
+  <header>
+    <h1>音声→ことばの雨</h1>
+    <button id="startBtn">スタート</button>
+    <button id="stopBtn" class="stop" disabled>ストップ</button>
+    <span id="status" class="status">準備OK</span>
+    <span id="liveText" class="live"></span>
+    <div class="speedControl" title="落下速度（mm/s）">
+      <label for="speedRange">速度:</label>
+      <input type="range" id="speedRange" min="50" max="500" value="200" step="10">
+      <span id="speedValue">200</span>mm/s
+    </div>
+  </header>
+  <main id="stage"></main>
+</div>
 
 <script>
-(() => {
-  // ===== Canvas =====
-  const cv = document.getElementById('cv');
-  const ctx = cv.getContext('2d');
+// ==== 物理長さ（mm→px） ====
+const MM_TO_PX = 96 / 25.4;
+let speedMM = 200; // mm/s
+let speedPxPerSec = speedMM * MM_TO_PX;
 
-  function measureTextBox(text, size){
-    ctx.save();
-    ctx.font = `bold ${size}px "Zen Maru Gothic","YuKyokasho","Noto Sans JP",sans-serif`;
-    const prev = ctx.textBaseline;
-    ctx.textBaseline = 'alphabetic';
-    const m = ctx.measureText(text);
-    const ascent  = (m.actualBoundingBoxAscent  ?? size*0.82);
-    const descent = (m.actualBoundingBoxDescent ?? size*0.18);
-    const width   = m.width;
-    ctx.textBaseline = prev;
-    ctx.restore();
-    return { w: width, h: ascent + descent, ascent, descent };
-  }
+// ==== ランダム色・フォント ====
+function randomColor(){
+  const hue = Math.floor(Math.random()*360);
+  const sat = 60 + Math.random()*30;    // 60〜90%
+  const light = 50 + Math.random()*20;  // 50〜70%
+  return `hsl(${hue},${sat}%,${light}%)`;
+}
+const fonts = [
+  '"BIZ UDP Gothic", sans-serif',
+  '"Hiragino Mincho ProN", serif',
+  '"Yu Mincho", serif',
+  '"Yu Gothic UI", sans-serif',
+  '"Kosugi Maru", "Noto Sans JP", sans-serif',
+  '"Noto Sans JP", sans-serif',
+  '"Noto Serif JP", serif'
+];
+function randomFont(){ return fonts[Math.floor(Math.random() * fonts.length)]; }
 
-  const words = []; // 画面内で動くことば
+// ==== ステージ&落下管理 ====
+const stage = document.getElementById("stage");
+let words = []; // {el,x,y,speed,width,height,text,isFinal}
+let animId = null;
+let lastTs = 0;
+let stageHeight = stage.clientHeight; // レイアウト計測をキャッシュ
+const MAX_WORDS = 80;                 // 負荷上限
 
-  function resize(){
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    cv.width = Math.floor(innerWidth * dpr);
-    cv.height = Math.floor(innerHeight * dpr);
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-    for(const o of words){
-      const tb = measureTextBox(o.text, o.size);
-      o.w = tb.w; o.h = tb.h; o.ascent = tb.ascent; o.descent = tb.descent;
-      const halfW = o.w/2, halfH = o.h/2;
-      if(o.x < halfW + 1) o.x = halfW + 1;
-      if(o.x > innerWidth - halfW - 1) o.x = innerWidth - halfW - 1;
-      const bottomY = innerHeight - 1;
-      if(o.y + halfH > bottomY) o.y = bottomY - halfH;
-    }
-  }
-  addEventListener('resize', resize, {passive:true});
-  resize();
+function spawnWord(text, {isFinal=false, fontSizePx=null} = {}){
+  if(!text) return;
+  const el = document.createElement("div");
+  el.className = "word " + (isFinal ? "final" : "interim");
+  el.dataset.text = text;
+  el.dataset.final = String(isFinal);
+  el.textContent = text;
+  el.style.color = randomColor();
+  el.style.fontFamily = randomFont();
+  if(fontSizePx){ el.style.fontSize = `${fontSizePx}px`; }
 
-  // ===== UI refs =====
-  const startBtn = document.getElementById('startBtn');
-  const stopBtn  = document.getElementById('stopBtn');
-  const micLed   = document.getElementById('micLed');
-  const asrLed   = document.getElementById('asrLed');
-  const speed    = document.getElementById('speed');
-  const speedVal = document.getElementById('speedVal');
-  const scoreEl  = document.getElementById('scoreVal');
-  const queueListEl = document.getElementById('queueList');
+  stage.appendChild(el);
+  const rect = el.getBoundingClientRect();
+  const maxX = Math.max(0, stage.clientWidth - rect.width);
+  const x = Math.random() * maxX;
+  el.style.left = `${x}px`;
 
-  let speedFactor = parseFloat(speed.value);
-  speed.addEventListener('input', () => {
-    speedFactor = parseFloat(speed.value);
-    speedVal.textContent = speedFactor.toFixed(1);
+  words.push({
+    el, x,
+    y: -rect.height - 8, // 画面外ちょい上
+    speed: speedPxPerSec,
+    width: rect.width,
+    height: rect.height,
+    text,
+    isFinal
   });
 
-  // ===== Audio (volume only) =====
-  let mediaStream=null, audioCtx=null, analyser=null, floatBuf=null, rafVol=null, lastVol=0.15;
-  function rms(buf){ let s=0; for(let i=0;i<buf.length;i++){ const v=buf[i]; s+=v*v; } return Math.sqrt(s/buf.length); }
-  function volumeLoop(){
-    if(!analyser) return;
-    analyser.getFloatTimeDomainData(floatBuf);
-    let v = Math.min(0.5, rms(floatBuf));
-    const norm = Math.pow(v/0.5, 0.6);
-    lastVol = 0.1 + 0.9*norm;
-    rafVol = requestAnimationFrame(volumeLoop);
+  // 上限を超えたら古い順に掃除
+  while(words.length > MAX_WORDS){
+    const w = words.shift();
+    w.el.remove();
   }
-  async function startMic(){
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:false }, video:false
+
+  if(!animId){
+    lastTs = performance.now();
+    animId = requestAnimationFrame(tick);
+  }
+}
+
+function upgradeToFinal(text){
+  for(let i = words.length - 1; i >= 0; i--){
+    const w = words[i];
+    if(!w.isFinal && w.text === text){
+      w.isFinal = true;
+      w.el.classList.remove("interim");
+      w.el.classList.add("final");
+      return true;
+    }
+  }
+  return false;
+}
+
+function tick(ts){
+  const dt = Math.min(0.05, (ts - lastTs) / 1000);
+  lastTs = ts;
+
+  for(const w of words){
+    w.y += w.speed * dt;
+    w.el.style.transform = `translateY(${w.y}px)`;
+  }
+  // はみ出たら削除
+  words = words.filter(w => {
+    const alive = (w.y - 8) < stageHeight;
+    if(!alive) w.el.remove();
+    return alive;
+  });
+
+  if(words.length > 0){
+    animId = requestAnimationFrame(tick);
+  }else{
+    animId = null;
+  }
+}
+
+// ==== 音声認識 & 音量連動 ====
+const startBtn = document.getElementById("startBtn");
+const stopBtn  = document.getElementById("stopBtn");
+const statusEl = document.getElementById("status");
+const liveText = document.getElementById("liveText");
+const speedRange = document.getElementById("speedRange");
+const speedValue = document.getElementById("speedValue");
+
+let recog = null;
+let listening = false;
+let interimTimer = null;
+let lastInterim = "";
+let lastInterimSpawned = ""; // 重複抑制
+
+// マイク音量 → フォントサイズ
+let currentVolume = 0;           // 0〜1 程度（RMS）
+let audioCtx = null, analyser = null, micSource = null, micStream = null, meterRafId = null;
+
+async function initMicVolumeMeter(){
+  if(audioCtx) return;
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:true, noiseSuppression:true, autoGainControl:true }
     });
-    micLed.classList.add('on');
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = audioCtx.createMediaStreamSource(mediaStream);
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AC();
     analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 1024;
-    floatBuf = new Float32Array(analyser.fftSize);
-    src.connect(analyser);
-    volumeLoop();
-  }
-  function stopMic(){
-    if(rafVol) cancelAnimationFrame(rafVol), rafVol=null;
-    if(audioCtx) { audioCtx.close(); audioCtx=null; }
-    if(mediaStream){ mediaStream.getTracks().forEach(t=>t.stop()); mediaStream=null; }
-    analyser=null; floatBuf=null; micLed.classList.remove('on');
-  }
+    const source = audioCtx.createMediaStreamSource(micStream);
+    micSource = source; source.connect(analyser);
 
-  // ===== かな化（ことば＝塊） =====
-  let kuroshiro = null, kuroReady = false;
-  (async () => {
-    try{
-      kuroshiro = new Kuroshiro();
-      await kuroshiro.init(new KuromojiAnalyzer({ dictPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }));
-      kuroReady = true;
-    }catch(e){ console.warn('Kuroshiro init failed, fallback to カタ→ひらのみ。', e); }
-  })();
-  function kataToHira(str){
-    return str.replace(/[\u30A1-\u30FA\u30FC]/g, ch => ch==='ー' ? 'ー' : String.fromCharCode(ch.charCodeAt(0) - 0x60));
-  }
-  function stripNonKana(str){
-    return str.replace(/[^\u3040-\u309F\u30A0-\u30FF\u30FC\s]+/g, '');
-  }
-  async function toHiraganaWords(str){
-    if(kuroReady){
-      try{
-        const hira = await kuroshiro.convert(str, { to:'hiragana', mode:'spaced' });
-        return hira.trim().split(/\s+/).filter(Boolean);
-      }catch(e){ console.warn('kuroshiro.convert error, fallback.', e); }
-    }
-    const hira = kataToHira(stripNonKana(str));
-    return hira.trim().split(/\s+/).filter(Boolean);
-  }
-
-  // ===== Speech Recognition（単一定義） =====
-  let recognizer=null, recognizing=false;
-  function setupASR(){
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if(!SR) return null;
-    const rec = new SR();
-    rec.lang = 'ja-JP';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.maxAlternatives = 1;
-
-    rec.onstart = ()=>{ asrLed.classList.add('on'); recognizing=true; };
-    rec.onend   = ()=>{ asrLed.classList.remove('on'); recognizing=false; };
-    rec.onerror = (e)=>{ console.warn('ASR error', e); };
-
-    rec.onresult = (e)=>{
-      let finalChunk = '';
-      for(let i=e.resultIndex;i<e.results.length;i++){
-        if(e.results[i].isFinal) finalChunk += e.results[i][0].transcript;
+    const dataArray = new Uint8Array(analyser.fftSize);
+    const update = () => {
+      analyser.getByteTimeDomainData(dataArray);
+      let sum = 0;
+      for(let i=0;i<dataArray.length;i++){
+        const v = (dataArray[i]-128)/128; sum += v*v;
       }
-      if(!finalChunk) return;
-      (async () => {
-        const wordsArr = await toHiraganaWords(finalChunk);
-        enqueueWords(wordsArr);        // ← ここで“表示キュー”へ
-      })();
+      const rms = Math.sqrt(sum / dataArray.length);
+      currentVolume = Math.min(1, rms * 3); // 0〜1に正規化
+      meterRafId = requestAnimationFrame(update);
     };
-    return rec;
+    update();
+  }catch(err){
+    console.warn("マイク初期化失敗:", err);
+    status("マイク初期化に失敗：" + err.message, true);
   }
-  function setupASROnce(){ if(recognizer) return recognizer; recognizer = setupASR(); return recognizer; }
+}
+function stopMicVolumeMeter(){
+  if(meterRafId){ cancelAnimationFrame(meterRafId); meterRafId = null; }
+  if(audioCtx){ try{ audioCtx.close(); }catch{} }
+  audioCtx = null; analyser = null;
+  if(micSource){ try{ micSource.disconnect(); }catch{} } micSource = null;
+  if(micStream){ micStream.getTracks().forEach(t => t.stop()); } micStream = null;
+  currentVolume = 0;
+}
+function volumeToFontSizePx(){
+  const minPx = 18, maxPx = 64;
+  return Math.round(minPx + (maxPx - minPx) * currentVolume);
+}
 
-  // ===== ことば落下（画面内オブジェクト） =====
-  const BASE_GRAVITY = 520, AIR_DRAG = 0.0012, WIND_JITTER = 16, MAX_WORDS = 1000;
+// ステータス
+function status(msg, isWarn=false){
+  statusEl.textContent = msg;
+  statusEl.style.background = isWarn ? "#fee2e2" : "";
+  statusEl.style.color      = isWarn ? "#991b1b" : "";
+}
 
-  function rand(min,max){ return min + Math.random()*(max-min); }
-  function randomColor(){
-    const h = Math.floor(rand(0,360));
-    const s = Math.floor(rand(60,95));
-    const l = Math.floor(rand(55,80));
-    return `hsl(${h} ${s}% ${l}%)`;
+// 認識セットアップ
+function setupRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){
+    status("このブラウザは音声認識に未対応です（Chrome系 推奨）", true);
+    startBtn.disabled = true; return null;
   }
-  function newSizeFromVolume(){ const min=22, max=120; return min + (max - min) * lastVol; }
+  const r = new SR();
+  r.lang = "ja-JP";
+  r.interimResults = true;
+  r.continuous = true;
 
-  function spawnWord(text){
-    const size = newSizeFromVolume();
-    const tb = measureTextBox(text, size);
-    const halfW = tb.w / 2, halfH = tb.h / 2;
-    const x = rand(halfW + 1, innerWidth - halfW - 1);
-    const y = -halfH - rand(2, 24);
-    const vx = rand(-180, 180) * speedFactor;
-    const vy = rand(10, 60) * speedFactor;
-    const color = randomColor();
-    words.push({ text, x, y, vx, vy, size, w:tb.w, h:tb.h, ascent:tb.ascent, descent:tb.descent, color, scored:false });
-    if(words.length > MAX_WORDS) words.shift();
-  }
+  r.onstart = () => status("認識中…（話してください）");
+  r.onerror = (e) => status("エラー：" + (e.error || "不明"), true);
+  r.onend = () => {
+    status("停止しました");
+    listening = false;
+    startBtn.disabled = false; stopBtn.disabled = true;
+  };
 
-  function step(dt){
-    const g = BASE_GRAVITY * speedFactor;
-    for(const o of words){
-      o.vy += g * dt;
-      o.vx += (Math.random()-0.5) * WIND_JITTER * dt;
-      o.vx -= o.vx * AIR_DRAG;
-      o.vy -= o.vy * AIR_DRAG;
-      o.x += o.vx * dt;
-      o.y += o.vy * dt;
+  r.onresult = (ev) => {
+    for(let i = ev.resultIndex; i < ev.results.length; i++){
+      const res = ev.results[i];
+      let text = res[0].transcript.trim();
 
-      const halfW = o.w/2, halfH = o.h/2;
-      if(o.x < halfW + 1){ o.x = halfW + 1; o.vx = Math.abs(o.vx)*0.65; }
-      if(o.x > innerWidth - halfW - 1){ o.x = innerWidth - halfW - 1; o.vx = -Math.abs(o.vx)*0.65; }
+      // ライブ表示
+      liveText.textContent = text || "";
 
-      const bottomY = innerHeight - 1;
-      if(o.y + halfH > bottomY){
-        o.y = bottomY - halfH;
-        o.vy = -Math.abs(o.vy) * 0.45;
-        o.vx *= 0.85;
-        if(Math.abs(o.vy) < 30) o.vy = -120 * speedFactor;
+      if(res.isFinal){
+        clearTimeout(interimTimer); interimTimer = null;
+        if(!text) continue;
+
+        const upgraded = upgradeToFinal(text);
+        if(!upgraded){
+          spawnWord(text, { isFinal:true, fontSizePx: volumeToFontSizePx() });
+        }
+        liveText.textContent = ""; lastInterim = ""; lastInterimSpawned = "";
+      }else{
+        clearTimeout(interimTimer);
+        lastInterim = text;
+        interimTimer = setTimeout(() => {
+          const t = (lastInterim || "").trim();
+          if(!t || t === lastInterimSpawned) return; // 同じ仮テキストの連投抑制
+          lastInterimSpawned = t;
+          spawnWord(t, { isFinal:false, fontSizePx: volumeToFontSizePx() });
+        }, 300);
       }
-      if(o.y - halfH < -2){
-        o.y = halfH;
-        o.vy = Math.abs(o.vy);
-      }
     }
-  }
+  };
+  return r;
+}
 
-  function draw(){
-    ctx.clearRect(0,0,innerWidth,innerHeight);
-    for(const o of words){
-      ctx.save();
-      ctx.translate(o.x, o.y);
-      ctx.font = `bold ${o.size}px "Zen Maru Gothic","YuKyokasho","Noto Sans JP",sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = o.color;
-      ctx.shadowColor = 'rgba(0,0,0,.45)';
-      ctx.shadowBlur = 12;
-      ctx.fillText(o.text, 0, 0);
-      ctx.restore();
-    }
-  }
+// ボタン
+startBtn.addEventListener("click", async () => {
+  if(!recog) recog = setupRecognition();
+  if(!recog) return;
+  await initMicVolumeMeter();
 
-  // ===== スコア（触れた/タップで+1） =====
-  let score = 0;
-  function addScoreOnce(o){
-    if(o.scored) return;
-    o.scored = true;
-    score += 1;
-    scoreEl.textContent = score;
-    const old = o.size;
-    o.size = old * 1.25;
-    setTimeout(()=>{
-      o.size = old;
-      const tb = measureTextBox(o.text, o.size);
-      o.w = tb.w; o.h = tb.h; o.ascent = tb.ascent; o.descent = tb.descent;
-    }, 120);
+  try{
+    recog.start();
+    listening = true;
+    startBtn.disabled = true; stopBtn.disabled = false;
+    status("認識中…（話してください）");
+  }catch(err){
+    status("開始できませんでした：" + err.message, true);
   }
-  function hitTest(px, py, o){
-    const halfW = o.w/2, halfH = o.h/2;
-    return (px >= o.x - halfW && px <= o.x + halfW && py >= o.y - halfH && py <= o.y + halfH);
-  }
-  function handlePointer(px, py){
-    for(let i=words.length-1;i>=0;i--){
-      const o = words[i];
-      if(hitTest(px, py, o)){ addScoreOnce(o); break; }
-    }
-  }
-  cv.addEventListener('pointerdown', e=>{ handlePointer(e.clientX, e.clientY); });
-  cv.addEventListener('pointermove', e=>{
-    if(e.pointerType === 'mouse'){ handlePointer(e.clientX, e.clientY); }
-  }, {passive:true});
+});
+stopBtn.addEventListener("click", () => {
+  if(recog && listening){ try{ recog.stop(); }catch{} }
+  listening = false;
+  startBtn.disabled = false; stopBtn.disabled = true;
+  status("停止しました");
+  liveText.textContent = "";
+  clearTimeout(interimTimer); interimTimer = null; lastInterim = ""; lastInterimSpawned = "";
+  stopMicVolumeMeter();
+});
 
-  // ===== 表示キュー：スコア左に縦表示 → 1秒ごとに先頭を落とす =====
-  const queueWords = [];           // 待ち行列（文字列）
-  let queueTimer = null;           // 1秒タイマー
-  function renderQueue(){
-    queueListEl.innerHTML = '';
-    for(const w of queueWords){
-      const div = document.createElement('div');
-      div.className = 'qItem';
-      const s = document.createElement('span');
-      s.textContent = w;
-      div.appendChild(s);
-      queueListEl.appendChild(div);
-    }
-  }
-  function ensureQueueTimer(){
-    if(queueTimer) return;
-    queueTimer = setInterval(() => {
-      if(queueWords.length === 0) return;
-      const next = queueWords.shift(); // ①一番上を取り出す
-      renderQueue();                   // ②表示から消える
-      spawnWord(next);                 // ③1秒ごとに落下させる
-    }, 1000);
-  }
-  function enqueueWords(arr){
-    for(const w of arr){
-      if(!w || !w.trim()) continue;
-      queueWords.push(w.trim());
-    }
-    renderQueue();     // 追加したら即、右のリストに表示
-    ensureQueueTimer(); // タイマーを起動（既に動いていれば何もしない）
-  }
-  function clearQueueTimer(){
-    if(queueTimer){ clearInterval(queueTimer); queueTimer=null; }
-  }
+// 速度スライダー
+speedRange.addEventListener("input", () => {
+  speedMM = Number(speedRange.value);
+  speedValue.textContent = speedMM;
+  speedPxPerSec = speedMM * MM_TO_PX;
+  words.forEach(w => w.speed = speedPxPerSec);
+});
 
-  // ===== ループ =====
-  let raf=null, lastT=performance.now();
-  function loop(){
-    const now = performance.now();
-    let dt = (now - lastT)/1000; lastT = now;
-    const sub = Math.min(4, Math.max(1, Math.ceil(dt/0.01)));
-    const h = dt / sub;
-    for(let i=0;i<sub;i++) step(h);
-    draw();
-    raf = requestAnimationFrame(loop);
-  }
-
-  // ===== Start/Stop =====
-  let mediaStarted=false;
-  async function startAll(){
-    try{ await startMic(); mediaStarted=true; }catch(e){ alert('マイクの使用を許可してください。\n'+e); return; }
-    setupASROnce();
-    if(recognizer && !recognizing){ try{ recognizer.start(); }catch(_){} }
-    if(!raf) { lastT = performance.now(); loop(); }
-    ensureQueueTimer();
-  }
-  function stopAll(){
-    if(recognizer && recognizing){ try{ recognizer.stop(); }catch(_){} }
-    recognizing=false; asrLed.classList.remove('on');
-    stopMic(); mediaStarted=false;
-    if(raf) cancelAnimationFrame(raf), raf=null;
-    clearQueueTimer();
-  }
-  startBtn.addEventListener('click', startAll);
-  stopBtn.addEventListener('click', stopAll);
-  window.addEventListener('pagehide', stopAll);
-
-  // フォントウォームアップ
-  ctx.font = 'bold 80px "Zen Maru Gothic","Noto Sans JP",sans-serif';
-  ctx.fillStyle = '#0b0e14';
-  ctx.fillText('あ', -9999, -9999);
-})();
+// リサイズ時：高さを更新（毎フレーム再計測しない）
+function updateStageMetrics(){
+  stageHeight = stage.clientHeight;
+}
+window.addEventListener("resize", updateStageMetrics);
+window.addEventListener("orientationchange", updateStageMetrics);
+updateStageMetrics();
 </script>
 </body>
 </html>
