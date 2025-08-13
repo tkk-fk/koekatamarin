@@ -3,55 +3,144 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>コエカタマリン風・ひらがなレイン（積もる版）</title>
+<title>コエカタマリン風・ことばキャッチ（キュー投下版）</title>
 <style>
-  html, body { height:100%; margin:0; background:#0b0e14; overflow:hidden; }
-  #ui { position:fixed; top:8px; left:0; right:0; display:flex; gap:10px; justify-content:center; z-index:10; }
-  button{
-    background:#1c2435; color:#e7eefc; border:1px solid #32415e; padding:10px 16px; border-radius:12px;
-    font-size:16px; cursor:pointer; box-shadow:0 6px 18px rgba(0,0,0,.25);
+  :root{ --scoreW:200px; --gap:12px; }
+  html,body{height:100%;margin:0;background:#0b0e14;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",system-ui}
+  canvas{position:fixed;inset:0}
+  #ui{
+    position:fixed;top:8px;left:12px;right:calc(2*var(--scoreW) + 3*var(--gap));
+    display:flex;gap:10px;align-items:center;z-index:10;flex-wrap:wrap
   }
-  button:hover{ border-color:#41588a }
-  #leds{ position:fixed; top:54px; left:0; right:0; display:flex; justify-content:center; gap:10px; z-index:9; font-size:12px; color:#a9b4c6 }
-  .led{ width:10px; height:10px; border-radius:50%; background:#525b6e; display:inline-block; margin-right:6px; vertical-align:middle }
-  .on{ background:#2ecc71; box-shadow:0 0 0 3px rgba(46,204,113,.18) }
-  canvas{ position:fixed; inset:0; }
-  #hint{ position:fixed; bottom:8px; left:50%; transform:translateX(-50%); color:#8ea1c5; font-size:12px; opacity:.8 }
+  button{
+    background:#1c2435;color:#e7eefc;border:1px solid #32415e;padding:10px 14px;border-radius:12px;
+    font-size:16px;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)
+  }
+  button:hover{border-color:#41588a}
+  .label{font-size:12px;color:#a9b4c6;margin-left:8px}
+  input[type="range"]{width:220px}
+  /* スコア */
+  #scorePanel{
+    position:fixed;top:8px;right:var(--gap);width:var(--scoreW);padding:12px 14px;border-radius:16px;z-index:11;
+    background:#121829;border:1px solid #2a3350;color:#cfe1ff;box-shadow:0 8px 24px rgba(0,0,0,.28)
+  }
+  #scorePanel h2{margin:.2rem 0 .4rem;font-size:14px;color:#9fb7ff;font-weight:600;letter-spacing:.02em}
+  #scoreVal{font-size:44px;line-height:1;font-weight:800}
+  #speedVal{display:inline-block;min-width:3ch;text-align:right}
+  /* キュー（スコア左） */
+  #queuePanel{
+    position:fixed;top:8px;right:calc(var(--gap) + var(--scoreW) + var(--gap));
+    width:var(--scoreW);padding:12px 14px;border-radius:16px;z-index:11;
+    background:#0f1528;border:1px solid #253057;color:#d8e3ff;box-shadow:0 8px 24px rgba(0,0,0,.28)
+  }
+  #queuePanel h2{margin:.2rem 0 .4rem;font-size:14px;color:#a9c2ff;font-weight:600;letter-spacing:.02em}
+  #queueList{max-height:50vh;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+  .qItem{
+    background:#162042;border:1px solid #2b3b6c;border-radius:12px;padding:6px 10px;
+    font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center
+  }
+  .qItem span{font-family:"Zen Maru Gothic","Noto Sans JP",sans-serif;font-size:22px;line-height:1}
+  /* LED */
+  #leds{position:fixed;top:54px;left:12px;right:calc(2*var(--scoreW) + 3*var(--gap));display:flex;gap:10px;z-index:9;font-size:12px;color:#a9b4c6}
+  .led{width:10px;height:10px;border-radius:50%;background:#525b6e;display:inline-block;margin-right:6px;vertical-align:middle}
+  .on{background:#2ecc71;box-shadow:0 0 0 3px rgba(46,204,113,.18)}
+  @media (max-width:920px){
+    #ui{right:12px}
+    #queuePanel{top:64px;right:12px;width:auto}
+    #scorePanel{top:118px;right:12px;width:auto}
+    #leds{right:12px}
+  }
 </style>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
+<!-- かな変換（漢字→ひらがな） -->
+<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dist/kuromoji.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/kuroshiro@1.2.0/dist/kuroshiro.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/kuroshiro-analyzer-kuromoji@1.1.0/dist/kuroshiro-analyzer-kuromoji.min.js"></script>
 </head>
 <body>
+  <canvas id="cv"></canvas>
+
   <div id="ui">
     <button id="startBtn">🎙️ はじめる</button>
     <button id="stopBtn">⏹ とめる</button>
+
+    <span class="label">落下スピード</span>
+    <input id="speed" type="range" min="0.5" max="2.0" step="0.1" value="1.0" />
+    <span class="label"><span id="speedVal">1.0</span>×</span>
   </div>
+
   <div id="leds">
     <span><span id="micLed" class="led"></span>マイク</span>
     <span><span id="asrLed" class="led"></span>音声認識</span>
   </div>
-  <canvas id="cv"></canvas>
-  <div id="hint">大きな声→大きい文字。ゆっくり降って、下でちゃんと積もります。</div>
+
+  <aside id="queuePanel">
+    <h2>つぎに おちる ことば</h2>
+    <div id="queueList"></div>
+  </aside>
+
+  <aside id="scorePanel">
+    <h2>スコア</h2>
+    <div id="scoreVal">0</div>
+  </aside>
 
 <script>
 (() => {
-  // ===== Canvas
+  // ===== Canvas =====
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
+
+  function measureTextBox(text, size){
+    ctx.save();
+    ctx.font = `bold ${size}px "Zen Maru Gothic","YuKyokasho","Noto Sans JP",sans-serif`;
+    const prev = ctx.textBaseline;
+    ctx.textBaseline = 'alphabetic';
+    const m = ctx.measureText(text);
+    const ascent  = (m.actualBoundingBoxAscent  ?? size*0.82);
+    const descent = (m.actualBoundingBoxDescent ?? size*0.18);
+    const width   = m.width;
+    ctx.textBaseline = prev;
+    ctx.restore();
+    return { w: width, h: ascent + descent, ascent, descent };
+  }
+
+  const words = []; // 画面内で動くことば
+
   function resize(){
     const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     cv.width = Math.floor(innerWidth * dpr);
     cv.height = Math.floor(innerHeight * dpr);
     ctx.setTransform(dpr,0,0,dpr,0,0);
+    for(const o of words){
+      const tb = measureTextBox(o.text, o.size);
+      o.w = tb.w; o.h = tb.h; o.ascent = tb.ascent; o.descent = tb.descent;
+      const halfW = o.w/2, halfH = o.h/2;
+      if(o.x < halfW + 1) o.x = halfW + 1;
+      if(o.x > innerWidth - halfW - 1) o.x = innerWidth - halfW - 1;
+      const bottomY = innerHeight - 1;
+      if(o.y + halfH > bottomY) o.y = bottomY - halfH;
+    }
   }
   addEventListener('resize', resize, {passive:true});
   resize();
 
-  // ===== UI
+  // ===== UI refs =====
   const startBtn = document.getElementById('startBtn');
   const stopBtn  = document.getElementById('stopBtn');
   const micLed   = document.getElementById('micLed');
   const asrLed   = document.getElementById('asrLed');
+  const speed    = document.getElementById('speed');
+  const speedVal = document.getElementById('speedVal');
+  const scoreEl  = document.getElementById('scoreVal');
+  const queueListEl = document.getElementById('queueList');
 
-  // ===== Audio (volume only)
+  let speedFactor = parseFloat(speed.value);
+  speed.addEventListener('input', () => {
+    speedFactor = parseFloat(speed.value);
+    speedVal.textContent = speedFactor.toFixed(1);
+  });
+
+  // ===== Audio (volume only) =====
   let mediaStream=null, audioCtx=null, analyser=null, floatBuf=null, rafVol=null, lastVol=0.15;
   function rms(buf){ let s=0; for(let i=0;i<buf.length;i++){ const v=buf[i]; s+=v*v; } return Math.sqrt(s/buf.length); }
   function volumeLoop(){
@@ -82,13 +171,34 @@
     analyser=null; floatBuf=null; micLed.classList.remove('on');
   }
 
-  // ===== Speech recognition (ja-JP)
-  let recognizer=null, recognizing=false; // ←★ ここだけに置く（重複させない）
+  // ===== かな化（ことば＝塊） =====
+  let kuroshiro = null, kuroReady = false;
+  (async () => {
+    try{
+      kuroshiro = new Kuroshiro();
+      await kuroshiro.init(new KuromojiAnalyzer({ dictPath: 'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/' }));
+      kuroReady = true;
+    }catch(e){ console.warn('Kuroshiro init failed, fallback to カタ→ひらのみ。', e); }
+  })();
   function kataToHira(str){
     return str.replace(/[\u30A1-\u30FA\u30FC]/g, ch => ch==='ー' ? 'ー' : String.fromCharCode(ch.charCodeAt(0) - 0x60));
   }
-  const toHiraLoose = s => kataToHira(s);
+  function stripNonKana(str){
+    return str.replace(/[^\u3040-\u309F\u30A0-\u30FF\u30FC\s]+/g, '');
+  }
+  async function toHiraganaWords(str){
+    if(kuroReady){
+      try{
+        const hira = await kuroshiro.convert(str, { to:'hiragana', mode:'spaced' });
+        return hira.trim().split(/\s+/).filter(Boolean);
+      }catch(e){ console.warn('kuroshiro.convert error, fallback.', e); }
+    }
+    const hira = kataToHira(stripNonKana(str));
+    return hira.trim().split(/\s+/).filter(Boolean);
+  }
 
+  // ===== Speech Recognition（単一定義） =====
+  let recognizer=null, recognizing=false;
   function setupASR(){
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if(!SR) return null;
@@ -103,21 +213,22 @@
     rec.onerror = (e)=>{ console.warn('ASR error', e); };
 
     rec.onresult = (e)=>{
-      let chunk = '';
-      for(let i=e.resultIndex;i<e.results.length;i++){ chunk += e.results[i][0].transcript; }
-      if(!chunk) return;
-      const hira = toHiraLoose(chunk);
-      for(const ch of hira){ if(/\s/.test(ch)) continue; spawnGlyph(ch); }
+      let finalChunk = '';
+      for(let i=e.resultIndex;i<e.results.length;i++){
+        if(e.results[i].isFinal) finalChunk += e.results[i][0].transcript;
+      }
+      if(!finalChunk) return;
+      (async () => {
+        const wordsArr = await toHiraganaWords(finalChunk);
+        enqueueWords(wordsArr);        // ← ここで“表示キュー”へ
+      })();
     };
     return rec;
   }
+  function setupASROnce(){ if(recognizer) return recognizer; recognizer = setupASR(); return recognizer; }
 
-  // ===== Physics (調整版)
-  const glyphs = [];
-  const gravity = 480;
-  const airDrag = 0.0012;
-  const windJitter = 18;
-  const MAX_GLYPHS = 1500;
+  // ===== ことば落下（画面内オブジェクト） =====
+  const BASE_GRAVITY = 520, AIR_DRAG = 0.0012, WIND_JITTER = 16, MAX_WORDS = 1000;
 
   function rand(min,max){ return min + Math.random()*(max-min); }
   function randomColor(){
@@ -126,142 +237,167 @@
     const l = Math.floor(rand(55,80));
     return `hsl(${h} ${s}% ${l}%)`;
   }
-  function newSizeFromVolume(){ const min=20, max=120; return min + (max - min) * lastVol; }
+  function newSizeFromVolume(){ const min=22, max=120; return min + (max - min) * lastVol; }
 
-  function spawnGlyph(ch){
+  function spawnWord(text){
     const size = newSizeFromVolume();
-    const r = size/2;
-    const x = rand(r, innerWidth - r);
-    const y = -size - rand(0, 40);
-    const vx = rand(-180, 180);
-    const vy = rand(5, 60);
-    const rot = rand(0, Math.PI*2);
-    const rotSpeed = (Math.random()<0.6) ? rand(-3,3) : 0;
+    const tb = measureTextBox(text, size);
+    const halfW = tb.w / 2, halfH = tb.h / 2;
+    const x = rand(halfW + 1, innerWidth - halfW - 1);
+    const y = -halfH - rand(2, 24);
+    const vx = rand(-180, 180) * speedFactor;
+    const vy = rand(10, 60) * speedFactor;
     const color = randomColor();
-    glyphs.push({ ch, x, y, vx, vy, size, rot, rotSpeed, color, static:false });
-    if(glyphs.length > MAX_GLYPHS){
-      for(let i=0;i<glyphs.length;i++){
-        if(!glyphs[i].static){ glyphs.splice(i,1); break; }
+    words.push({ text, x, y, vx, vy, size, w:tb.w, h:tb.h, ascent:tb.ascent, descent:tb.descent, color, scored:false });
+    if(words.length > MAX_WORDS) words.shift();
+  }
+
+  function step(dt){
+    const g = BASE_GRAVITY * speedFactor;
+    for(const o of words){
+      o.vy += g * dt;
+      o.vx += (Math.random()-0.5) * WIND_JITTER * dt;
+      o.vx -= o.vx * AIR_DRAG;
+      o.vy -= o.vy * AIR_DRAG;
+      o.x += o.vx * dt;
+      o.y += o.vy * dt;
+
+      const halfW = o.w/2, halfH = o.h/2;
+      if(o.x < halfW + 1){ o.x = halfW + 1; o.vx = Math.abs(o.vx)*0.65; }
+      if(o.x > innerWidth - halfW - 1){ o.x = innerWidth - halfW - 1; o.vx = -Math.abs(o.vx)*0.65; }
+
+      const bottomY = innerHeight - 1;
+      if(o.y + halfH > bottomY){
+        o.y = bottomY - halfH;
+        o.vy = -Math.abs(o.vy) * 0.45;
+        o.vx *= 0.85;
+        if(Math.abs(o.vy) < 30) o.vy = -120 * speedFactor;
       }
-    }
-  }
-
-  function collide(a,b){
-    const ra=a.size*0.45, rb=b.size*0.45;
-    return Math.abs(a.x-b.x) < (ra+rb) && Math.abs(a.y-b.y) < (ra+rb);
-  }
-  function resolveCollision(a,b){
-    const nx = a.x - b.x, ny = a.y - b.y;
-    const dist = Math.hypot(nx,ny) || 1;
-    const ra=a.size*0.45, rb=b.size*0.45;
-    const overlap = (ra+rb) - dist;
-    if(overlap <= 0) return;
-    const ux = nx/dist, uy = ny/dist;
-
-    if(!a.static && !b.static){
-      a.x += ux * (overlap/2); a.y += uy * (overlap/2);
-      b.x -= ux * (overlap/2); b.y -= uy * (overlap/2);
-    } else if(!a.static){
-      a.x += ux * overlap; a.y += uy * overlap;
-    } else if(!b.static){
-      b.x -= ux * overlap; b.y -= uy * overlap;
-    }
-
-    const e = 0.25;
-    const vaN = a.vx*ux + a.vy*uy;
-    const vbN = b.vx*ux + b.vy*uy;
-    if(!a.static){ a.vx += (vbN - vaN)*ux * (1+e); a.vy += (vbN - vaN)*uy * (1+e); }
-    if(!b.static){ b.vx += (vaN - vbN)*ux * (1+e); b.vy += (vaN - vbN)*uy * (1+e); }
-
-    const aOnTop = a.y < b.y && Math.abs(ux) < 0.7;
-    const bOnTop = b.y < a.y && Math.abs(ux) < 0.7;
-    if(!a.static && aOnTop && a.vy >= -40){ a.vx*=0.3; a.vy=0; a.static=true; a.rotSpeed=0; }
-    if(!b.static && bOnTop && b.vy >= -40){ b.vx*=0.3; b.vy=0; b.static=true; b.rotSpeed=0; }
-  }
-
-  let lastT = performance.now();
-  function step(){
-    const now = performance.now();
-    let dt = (now - lastT)/1000; lastT = now;
-    const sub = Math.min(4, Math.max(1, Math.ceil(dt/0.01)));
-    const h = dt / sub;
-
-    for(let s=0;s<sub;s++){
-      for(const g of glyphs){
-        if(g.static) continue;
-        g.vy += gravity * h;
-        g.vx += (Math.random()-0.5) * windJitter * h;
-        g.vx -= g.vx * 0.0012;
-        g.vy -= g.vy * 0.0012;
-        g.x += g.vx * h;
-        g.y += g.vy * h;
-        g.rot += g.rotSpeed * h;
-
-        const r = g.size/2;
-        if(g.x < r){ g.x = r; g.vx = Math.abs(g.vx)*0.6; }
-        if(g.x > innerWidth - r){ g.x = innerWidth - r; g.vx = -Math.abs(g.vx)*0.6; }
-        if(g.y >= innerHeight - r){
-          g.y = innerHeight - r; g.vx *= 0.2; g.vy = 0; g.static = true; g.rotSpeed = 0;
-        }
-      }
-      for(let i=0;i<glyphs.length;i++){
-        for(let j=i+1;j<glyphs.length;j++){
-          const a=glyphs[i], b=glyphs[j];
-          if(collide(a,b)) resolveCollision(a,b);
-        }
+      if(o.y - halfH < -2){
+        o.y = halfH;
+        o.vy = Math.abs(o.vy);
       }
     }
   }
 
   function draw(){
     ctx.clearRect(0,0,innerWidth,innerHeight);
-    for(const g of glyphs){
+    for(const o of words){
       ctx.save();
-      ctx.translate(g.x, g.y);
-      ctx.rotate(g.rot);
-      ctx.font = `bold ${g.size}px "Zen Maru Gothic", "YuKyokasho", "Noto Sans JP", "Hiragino Maru Gothic ProN", sans-serif`;
+      ctx.translate(o.x, o.y);
+      ctx.font = `bold ${o.size}px "Zen Maru Gothic","YuKyokasho","Noto Sans JP",sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillStyle = g.color;
+      ctx.fillStyle = o.color;
       ctx.shadowColor = 'rgba(0,0,0,.45)';
       ctx.shadowBlur = 12;
-      ctx.fillText(g.ch, 0, 0);
+      ctx.fillText(o.text, 0, 0);
       ctx.restore();
     }
   }
 
-  let rafAnim=null;
-  function loop(){ step(); draw(); rafAnim = requestAnimationFrame(loop); }
-
-  // ===== Start/Stop（★ここでは「再宣言しない」）
-  function setupASROnce(){
-    if(recognizer) return recognizer;
-    recognizer = setupASR();
-    return recognizer;
+  // ===== スコア（触れた/タップで+1） =====
+  let score = 0;
+  function addScoreOnce(o){
+    if(o.scored) return;
+    o.scored = true;
+    score += 1;
+    scoreEl.textContent = score;
+    const old = o.size;
+    o.size = old * 1.25;
+    setTimeout(()=>{
+      o.size = old;
+      const tb = measureTextBox(o.text, o.size);
+      o.w = tb.w; o.h = tb.h; o.ascent = tb.ascent; o.descent = tb.descent;
+    }, 120);
   }
+  function hitTest(px, py, o){
+    const halfW = o.w/2, halfH = o.h/2;
+    return (px >= o.x - halfW && px <= o.x + halfW && py >= o.y - halfH && py <= o.y + halfH);
+  }
+  function handlePointer(px, py){
+    for(let i=words.length-1;i>=0;i--){
+      const o = words[i];
+      if(hitTest(px, py, o)){ addScoreOnce(o); break; }
+    }
+  }
+  cv.addEventListener('pointerdown', e=>{ handlePointer(e.clientX, e.clientY); });
+  cv.addEventListener('pointermove', e=>{
+    if(e.pointerType === 'mouse'){ handlePointer(e.clientX, e.clientY); }
+  }, {passive:true});
+
+  // ===== 表示キュー：スコア左に縦表示 → 1秒ごとに先頭を落とす =====
+  const queueWords = [];           // 待ち行列（文字列）
+  let queueTimer = null;           // 1秒タイマー
+  function renderQueue(){
+    queueListEl.innerHTML = '';
+    for(const w of queueWords){
+      const div = document.createElement('div');
+      div.className = 'qItem';
+      const s = document.createElement('span');
+      s.textContent = w;
+      div.appendChild(s);
+      queueListEl.appendChild(div);
+    }
+  }
+  function ensureQueueTimer(){
+    if(queueTimer) return;
+    queueTimer = setInterval(() => {
+      if(queueWords.length === 0) return;
+      const next = queueWords.shift(); // ①一番上を取り出す
+      renderQueue();                   // ②表示から消える
+      spawnWord(next);                 // ③1秒ごとに落下させる
+    }, 1000);
+  }
+  function enqueueWords(arr){
+    for(const w of arr){
+      if(!w || !w.trim()) continue;
+      queueWords.push(w.trim());
+    }
+    renderQueue();     // 追加したら即、右のリストに表示
+    ensureQueueTimer(); // タイマーを起動（既に動いていれば何もしない）
+  }
+  function clearQueueTimer(){
+    if(queueTimer){ clearInterval(queueTimer); queueTimer=null; }
+  }
+
+  // ===== ループ =====
+  let raf=null, lastT=performance.now();
+  function loop(){
+    const now = performance.now();
+    let dt = (now - lastT)/1000; lastT = now;
+    const sub = Math.min(4, Math.max(1, Math.ceil(dt/0.01)));
+    const h = dt / sub;
+    for(let i=0;i<sub;i++) step(h);
+    draw();
+    raf = requestAnimationFrame(loop);
+  }
+
+  // ===== Start/Stop =====
+  let mediaStarted=false;
   async function startAll(){
-    try{ await startMic(); }catch(e){ alert('マイクの使用を許可してください。\n'+e); return; }
+    try{ await startMic(); mediaStarted=true; }catch(e){ alert('マイクの使用を許可してください。\n'+e); return; }
     setupASROnce();
     if(recognizer && !recognizing){ try{ recognizer.start(); }catch(_){} }
-    if(!rafAnim) loop();
+    if(!raf) { lastT = performance.now(); loop(); }
+    ensureQueueTimer();
   }
   function stopAll(){
     if(recognizer && recognizing){ try{ recognizer.stop(); }catch(_){} }
     recognizing=false; asrLed.classList.remove('on');
-    stopMic();
-    if(rafAnim) cancelAnimationFrame(rafAnim), rafAnim=null;
+    stopMic(); mediaStarted=false;
+    if(raf) cancelAnimationFrame(raf), raf=null;
+    clearQueueTimer();
   }
-
   startBtn.addEventListener('click', startAll);
   stopBtn.addEventListener('click', stopAll);
   window.addEventListener('pagehide', stopAll);
 
   // フォントウォームアップ
-  ctx.font = 'bold 80px "Zen Maru Gothic", "Noto Sans JP", sans-serif';
+  ctx.font = 'bold 80px "Zen Maru Gothic","Noto Sans JP",sans-serif';
   ctx.fillStyle = '#0b0e14';
   ctx.fillText('あ', -9999, -9999);
 })();
 </script>
-<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700&display=swap" rel="stylesheet">
 </body>
 </html>
